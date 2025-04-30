@@ -5,6 +5,9 @@ import axios from 'axios';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import LandingPage from './LandingPage';
 
+console.log(process.env.REACT_APP_GOOGLE_CLIENT_ID);
+
+
 function AppInner() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
