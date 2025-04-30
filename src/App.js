@@ -5,6 +5,7 @@ import axios from 'axios';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import LandingPage from './LandingPage';
 import CarSelection from './CarSelection';
+import Login from './Login';
 import { useSupabaseClient, useSession } from '@supabase/auth-helpers-react';
 
 console.log(process.env.REACT_APP_GOOGLE_CLIENT_ID);
@@ -25,10 +26,12 @@ function AppInner() {
   const [showHomeConfirm, setShowHomeConfirm] = useState(false);
   const [showCarSelection, setShowCarSelection] = useState(false);
   const [savedCar, setSavedCar] = useState(null);
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const chatBoxRef = useRef(null);
   const supabase = useSupabaseClient();
   const session = useSession();
   const [isDocumentVisible, setIsDocumentVisible] = useState(true);
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -118,6 +121,24 @@ function AppInner() {
         
         checkUserCars();
       }
+    } else {
+      // For non-authenticated users, check if they have temporarily saved car info
+      try {
+        const tempCarInfo = localStorage.getItem('tempCarInfo');
+        if (tempCarInfo) {
+          const car = JSON.parse(tempCarInfo);
+          setCarDetails({
+            make: car.make,
+            model: car.model,
+            year: car.year
+          });
+          setSavedCar(car); // Use savedCar for temporary car too
+          setStep(4); // Skip to problem description
+        }
+      } catch (error) {
+        console.error('Error retrieving temporary car info:', error);
+        // Simply continue with normal flow if error
+      }
     }
   }, [session, supabase]);
 
@@ -144,17 +165,11 @@ function AppInner() {
         const initialMessage = `Hello, I am AutoMate! I see you're working with your ${savedCar.year} ${savedCar.make} ${savedCar.model}. How can I help you with it today?`;
         setMessages([{ text: initialMessage, sender: 'bot' }]);
       } else if (step === 1) {
-        // No car, starting fresh
-        const initialMessage = 'Hello, I am AutoMate, I am here to help you with your car problems!';
-        setMessages([{ text: initialMessage, sender: 'bot' }]);
-        
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        
-        // Show the make question separately
-        setMessages(prev => [...prev, { 
-          text: 'What is the make of your car?', 
-          sender: 'bot'
-        }]);
+        // No car, starting fresh - show welcome and question in one update to prevent duplicates
+        setMessages([
+          { text: 'Hello, I am AutoMate, I am here to help you with your car problems!', sender: 'bot' },
+          { text: 'What is the make of your car?', sender: 'bot' }
+        ]);
       }
       
       setIsBotTyping(false);
@@ -244,34 +259,7 @@ function AppInner() {
     ]);
   };
 
-  // Reset chatbot
-  const restartChat = () => {
-    if (session?.user) {
-      // For logged in users, show car selection
-      setShowCarSelection(true);
-    } else {
-      // For anonymous users, reset to the beginning
-      async function showInitialMessages() {
-        setMessages([]);
-        setIsBotTyping(true);
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        setMessages([{ text: 'Hello, I am AutoMate, I am here to help you with your car problems!', sender: 'bot' }]);
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        setMessages([
-          { text: 'Hello, I am AutoMate, I am here to help you with your car problems!', sender: 'bot' },
-          { text: 'What is the make of your car?', sender: 'bot' }
-        ]);
-        setIsBotTyping(false);
-      }
-      showInitialMessages();
-      setInput('');
-      setStep(1);
-      setCarDetails({ make: '', model: '', year: '' });
-    }
-    setShowRestartConfirm(false);
-  };
-
-  // Improve the handleCarDetailInput function to prevent duplicates
+  // Update car handling for non-authenticated users
   const handleCarDetailInput = async (value) => {
     if (!value.trim()) return;
 
@@ -284,21 +272,22 @@ function AppInner() {
     
     // Short delay before bot response
     const typingDelay = 1000;
+    let updatedCarDetails = {...carDetails};
 
     let botMsg = null;
     if (step === 1) {
-      setCarDetails({ ...carDetails, make: value });
+      updatedCarDetails.make = value;
       botMsg = { text: `What is the model of your ${value}?`, sender: 'bot' };
       setStep(2);
     } else if (step === 2) {
-      setCarDetails({ ...carDetails, model: value });
+      updatedCarDetails.model = value;
       botMsg = { text: `What is the year of your ${carDetails.make} ${value}?`, sender: 'bot' };
       setStep(3);
     } else if (step === 3) {
       const year = value.trim();
-      setCarDetails({ ...carDetails, year });
+      updatedCarDetails.year = year;
       
-      // If user is logged in, save this car
+      // If user is logged in, save this car to database
       if (session?.user) {
         const newCar = {
           make: carDetails.make,
@@ -311,11 +300,33 @@ function AppInner() {
           setSavedCar(savedCarData);
           localStorage.setItem('lastSelectedCar', JSON.stringify(savedCarData));
         }
+      } else {
+        // For non-authenticated users, save to localStorage temporarily
+        const tempCar = {
+          make: carDetails.make,
+          model: carDetails.model,
+          year: year
+        };
+        localStorage.setItem('tempCarInfo', JSON.stringify(tempCar));
+        setSavedCar(tempCar);
+        
+        // Show login prompt with timeout - only once per session
+        if (!localStorage.getItem('loginPromptShown')) {
+          setShowLoginPrompt(true);
+          localStorage.setItem('loginPromptShown', 'true');
+          
+          // Auto-hide the prompt after 10 seconds
+          setTimeout(() => {
+            setShowLoginPrompt(false);
+          }, 10000);
+        }
       }
       
       botMsg = { text: 'Describe the problem with your car...', sender: 'bot' };
       setStep(4);
     }
+    
+    setCarDetails(updatedCarDetails);
     
     if (botMsg) {
       await new Promise((resolve) => setTimeout(resolve, typingDelay));
@@ -323,6 +334,35 @@ function AppInner() {
     }
     
     setIsBotTyping(false);
+  };
+
+  // Modify restart for both user types
+  const restartChat = () => {
+    if (session?.user) {
+      // For logged in users, show car selection
+      setShowCarSelection(true);
+    } else {
+      // For non-authenticated users, reset to the beginning
+      localStorage.removeItem('tempCarInfo');
+      setSavedCar(null);
+      
+      async function showInitialMessages() {
+        setMessages([]);
+        setIsBotTyping(true);
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        // Set both messages at once to prevent duplicates
+        setMessages([
+          { text: 'Hello, I am AutoMate, I am here to help you with your car problems!', sender: 'bot' },
+          { text: 'What is the make of your car?', sender: 'bot' }
+        ]);
+        setIsBotTyping(false);
+      }
+      showInitialMessages();
+      setInput('');
+      setStep(1);
+      setCarDetails({ make: '', model: '', year: '' });
+    }
+    setShowRestartConfirm(false);
   };
 
   const sendMessage = async () => {
@@ -409,6 +449,37 @@ function AppInner() {
     scrollToBottom();
   }, [messages]);
 
+  // Add login prompt handling
+  const handleLoginPromptClose = () => {
+    setShowLoginPrompt(false);
+  };
+
+  const handleLoginRedirect = () => {
+    setShowLoginPrompt(false);
+    // Redirect to home page to login
+    window.location.href = '/';
+  };
+
+  const handleUserMenuToggle = () => {
+    setShowUserMenu(!showUserMenu);
+  };
+  
+  const handleSignOut = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Error signing out:', error);
+      } else {
+        // Clear any local car data
+        localStorage.removeItem('lastSelectedCar');
+        // Redirect to home
+        window.location.href = '/';
+      }
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+
   return (
     <div className="chat-app-layout">
       <SideMenu isOpen={menuOpen} onToggle={() => setMenuOpen((open) => !open)} onHomeClick={handleHomeClick} />
@@ -417,6 +488,40 @@ function AppInner() {
           <div className="app-title-bubble">
             AutoMate
             <img src={require('./automateiconnew.png')} alt="AutoMate Icon" className="automate-icon app-title-large-icon" />
+          </div>
+          <div className="header-right">
+            {!session?.user ? (
+              <Login />
+            ) : (
+              <div className="user-profile-container">
+                <div className="user-profile-mini" onClick={handleUserMenuToggle}>
+                  {session.user.user_metadata?.avatar_url ? (
+                    <img 
+                      src={session.user.user_metadata.avatar_url} 
+                      alt={session.user.user_metadata.full_name || session.user.email} 
+                      className="user-avatar-mini" 
+                    />
+                  ) : (
+                    <div className="user-initial">
+                      {(session.user.user_metadata?.full_name || session.user.email || '').charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <span className="user-name-mini">{session.user.user_metadata?.full_name || session.user.email}</span>
+                </div>
+                {showUserMenu && (
+                  <div className="user-dropdown">
+                    <div className="user-info">
+                      <p className="user-name">{session.user.user_metadata?.full_name || session.user.email}</p>
+                      <p className="user-email">{session.user.email}</p>
+                    </div>
+                    <div className="dropdown-divider"></div>
+                    <button className="sign-out-button" onClick={handleSignOut}>
+                      Sign Out
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </header>
         <main className="chat-container">
@@ -555,6 +660,30 @@ function AppInner() {
               </div>
             </div>
           )}
+          {showLoginPrompt && (
+            <div className="login-prompt-modal">
+              <div className="login-prompt-box">
+                <button className="close-btn" onClick={handleLoginPromptClose}>×</button>
+                <p>Sign in to save your car details for future sessions!</p>
+                <div className="login-prompt-buttons">
+                  <button
+                    type="button"
+                    onClick={handleLoginRedirect}
+                    className="login-now-btn"
+                  >
+                    Sign in now
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLoginPromptClose}
+                    className="continue-btn"
+                  >
+                    Continue without account
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </div>
@@ -591,7 +720,7 @@ function SideMenu({ isOpen, onToggle, onHomeClick }) {
           <ul>
             <li><a href="/" onClick={onHomeClick}>Home</a></li>
             <li><a href="/chat">Chat</a></li>
-            <li><a href="#about">About</a></li>
+            <li><a href="https://eliashannoncalculator.cikeys.com/Automate/index.php" target="_blank" rel="noopener noreferrer">About</a></li>
           </ul>
         </nav>
       )}
