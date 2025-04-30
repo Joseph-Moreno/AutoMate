@@ -8,9 +8,12 @@ const PORT = 5001;
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://192.168.1.17:3000'],
-  methods: ['GET', 'POST'],
-  credentials: true
+  origin: ['http://localhost:3000', 'https://localhost:3000', 'http://192.168.1.17:3000', 'https://192.168.1.17:3000'],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
 app.use(express.json());
 
@@ -135,5 +138,5 @@ Always use the exact format above with the numbered reasons. Replace {specific i
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
-  console.log('CORS enabled for:', ['http://localhost:3000', 'http://192.168.1.17:3000']);
+  console.log('CORS enabled for:', ['http://localhost:3000', 'https://localhost:3000', 'http://192.168.1.17:3000', 'https://192.168.1.17:3000']);
 });

@@ -19,14 +19,12 @@ const Login = () => {
   }
 
   return (
-    <div className="login-container">
-      <button 
-        onClick={googleSignIn}
-        className="google-login-button"
-      >
-        Sign in with Google
-      </button>
-    </div>
+    <button 
+      className="google-sign-in-prompt"
+      onClick={googleSignIn}
+    >
+      Sign in with Google
+    </button>
   );
 };
 
