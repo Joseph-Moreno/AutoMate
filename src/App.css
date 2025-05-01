@@ -589,13 +589,15 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 1.5rem 2rem;
+  padding: 1.5rem 3rem 1.5rem 2rem;
   max-width: 100%;
   margin: 0 auto;
   width: 100%;
   position: relative;
   z-index: 1000;
   min-height: 80px;
+  box-sizing: border-box;
+  overflow: visible;
 }
 
 .header-right {
@@ -606,7 +608,6 @@ body {
   top: 50%;
   transform: translateY(-50%);
   z-index: 1001;
-  margin-right: 50px;
 }
 
 /* Google Sign-in button styling */
@@ -629,10 +630,12 @@ body {
   max-width: fit-content;
   margin-right: 0;
   min-height: 44px;
-  width: 170px;
+  width: 175px;
   line-height: 1.2;
   text-align: left;
   box-sizing: border-box;
+  overflow: visible;
+  white-space: normal;
 }
 
 .google-sign-in-prompt::before {

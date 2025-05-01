@@ -513,7 +513,7 @@ function AppInner() {
             AutoMate
             <img src={require('./automateiconnew.png')} alt="AutoMate Icon" className="automate-icon app-title-large-icon" />
           </div>
-          <div className="header-right" style={{ right: '25px' }}>
+          <div className="header-right" style={{ right: '15px' }}>
             {!session?.user ? (
               <Login />
             ) : (

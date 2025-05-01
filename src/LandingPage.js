@@ -114,7 +114,7 @@ function LandingPage() {
   return (
     <div className="landing-page">
       <div className="header-container">
-        <div className="header-right">
+        <div className="header-right" style={{ right: '10px' }}>
           {!user ? (
             <Login />
           ) : (
