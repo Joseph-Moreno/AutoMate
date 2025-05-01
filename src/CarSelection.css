@@ -67,6 +67,7 @@
   cursor: pointer;
   transition: all 0.2s ease;
   border: 1px solid transparent;
+  position: relative;
 }
 
 .car-item:hover {
@@ -95,6 +96,7 @@
 
 .car-details {
   flex: 1;
+  margin-right: 10px;
 }
 
 .car-details h3 {
@@ -251,4 +253,89 @@
   border: 1px solid rgba(255, 255, 255, 0.4);
   animation: pulse 1.5s infinite;
   cursor: default;
+}
+
+/* Add styles for delete functionality and car limit */
+.delete-car-btn {
+  background-color: rgba(255, 59, 48, 0.2);
+  color: white;
+  border: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
+  transition: all 0.2s ease;
+  margin-left: 10px;
+  flex-shrink: 0;
+}
+
+.delete-car-btn:hover {
+  background-color: rgba(255, 59, 48, 0.6);
+  transform: scale(1.1);
+}
+
+.delete-confirm {
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 8px 12px;
+  border-radius: 8px;
+  gap: 8px;
+  margin-left: 10px;
+}
+
+.delete-confirm span {
+  color: white;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.confirm-yes, .confirm-no {
+  background: none;
+  border: none;
+  color: white;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.confirm-yes {
+  background-color: rgba(255, 59, 48, 0.5);
+}
+
+.confirm-yes:hover {
+  background-color: rgba(255, 59, 48, 0.8);
+}
+
+.confirm-no {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.confirm-no:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+.car-limit-message {
+  background: rgba(255, 160, 0, 0.2);
+  border: 1px solid rgba(255, 160, 0, 0.4);
+  border-radius: 10px;
+  padding: 15px;
+  text-align: center;
+  color: white;
+  margin-top: 15px;
+}
+
+.car-limit-message p {
+  margin: 5px 0;
+  font-size: 14px;
+}
+
+.car-limit-message p:first-child {
+  font-weight: bold;
 } 

@@ -20,7 +20,7 @@ const Login = () => {
 
   return (
     <button 
-      className="google-sign-in-prompt"
+      className="login-now-btn"
       onClick={googleSignIn}
       title="Sign in with Google to save your data"
     >

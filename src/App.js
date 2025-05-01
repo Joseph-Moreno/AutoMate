@@ -37,7 +37,9 @@ function AppInner() {
   const [showCarSelection, setShowCarSelection] = useState(false);
   const [savedCar, setSavedCar] = useState(null);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const chatBoxRef = useRef(null);
+  const settingsMenuRef = useRef(null);
   const supabase = useSupabaseClient();
   const session = useSession();
   const [isDocumentVisible, setIsDocumentVisible] = useState(true);
@@ -65,100 +67,157 @@ function AppInner() {
 
   useEffect(() => {
     // Check if user is logged in
-    if (session?.user) {
-      console.log("User is logged in:", session.user);
-      
-      // Load previously selected car from localStorage for immediate UI update
-      const checkLastSelectedCar = () => {
+    const checkUserStatus = async () => {
+      if (session?.user) {
+        console.log("User is logged in:", session.user);
+        
+        // Check if there's a pending car save from the sign-in process
+        const pendingCarSave = localStorage.getItem('pendingCarSave');
+        if (pendingCarSave) {
+          try {
+            const carData = JSON.parse(pendingCarSave);
+            
+            // Before saving, check if user is at the car limit
+            const atLimit = await checkCarLimit(session.user.id);
+            if (atLimit) {
+              console.error('Cannot save car: User at maximum vehicle limit');
+              localStorage.removeItem('pendingCarSave');
+              
+              // Notify the user
+              setMessages([
+                { 
+                  text: "I couldn't save your car details because you've reached the maximum number of vehicles allowed (5). You can delete existing vehicles from the car selection screen.",
+                  sender: 'bot' 
+                }
+              ]);
+              return;
+            }
+            
+            // Save the car to the user's account
+            saveCar(carData).then(savedCarData => {
+              if (savedCarData) {
+                // Update UI with the saved car
+                setSavedCar(savedCarData);
+                setCarDetails({
+                  make: savedCarData.make,
+                  model: savedCarData.model,
+                  year: savedCarData.year
+                });
+                setStep(4); // Skip to problem description
+                
+                // Store as last selected car
+                localStorage.setItem('lastSelectedCar', JSON.stringify(savedCarData));
+                // Clear the pending save
+                localStorage.removeItem('pendingCarSave');
+                // Clear the temp car info
+                localStorage.removeItem('tempCarInfo');
+                // Set flag to show special welcome message
+                localStorage.setItem('justTransferredCar', 'true');
+                
+                console.log("Successfully transferred temporary car to user account:", savedCarData);
+              }
+            });
+            // Continue with the regular flow to check for other cars
+          } catch (error) {
+            console.error('Error processing pending car save:', error);
+            localStorage.removeItem('pendingCarSave');
+          }
+        }
+        
+        // Load previously selected car from localStorage for immediate UI update
+        const checkLastSelectedCar = () => {
+          try {
+            const lastSelectedCar = localStorage.getItem('lastSelectedCar');
+            if (lastSelectedCar) {
+              const car = JSON.parse(lastSelectedCar);
+              console.log("Found car in localStorage:", car);
+              setSavedCar(car);
+              setCarDetails({
+                make: car.make,
+                model: car.model,
+                year: car.year
+              });
+              setStep(4); // Skip to problem description
+              return true;
+            }
+          } catch (error) {
+            console.error('Error parsing localStorage car:', error);
+          }
+          return false;
+        };
+        
+        // Try to load from localStorage first (faster)
+        if (!checkLastSelectedCar()) {
+          // No car in localStorage, check database
+          const checkUserCars = async () => {
+            try {
+              const { data, error } = await supabase
+                .from('cars')
+                .select('*')
+                .eq('user_id', session.user.id)
+                .order('created_at', { ascending: false });
+              
+              if (error) {
+                console.error('Error fetching cars:', error);
+                setShowCarSelection(true);
+                return;
+              }
+              
+              if (data && data.length > 0) {
+                // User has cars, auto-select most recent or show selection if multiple
+                console.log("Found cars in database:", data);
+                if (data.length === 1) {
+                  // Auto-select single car
+                  const car = data[0];
+                  setSavedCar(car);
+                  setCarDetails({
+                    make: car.make,
+                    model: car.model,
+                    year: car.year
+                  });
+                  setStep(4); // Skip to problem description
+                  
+                  // Save to localStorage for faster loading next time
+                  localStorage.setItem('lastSelectedCar', JSON.stringify(car));
+                } else {
+                  // Multiple cars, show selection
+                  setShowCarSelection(true);
+                }
+              } else {
+                // No cars found, show car input flow
+                console.log("No cars found for user");
+                setShowCarSelection(true);
+              }
+            } catch (err) {
+              console.error('Error checking user cars:', err);
+              setShowCarSelection(true);
+            }
+          };
+          
+          checkUserCars();
+        }
+      } else {
+        // For non-authenticated users, check if they have temporarily saved car info
         try {
-          const lastSelectedCar = localStorage.getItem('lastSelectedCar');
-          if (lastSelectedCar) {
-            const car = JSON.parse(lastSelectedCar);
-            console.log("Found car in localStorage:", car);
-            setSavedCar(car);
+          const tempCarInfo = localStorage.getItem('tempCarInfo');
+          if (tempCarInfo) {
+            const car = JSON.parse(tempCarInfo);
             setCarDetails({
               make: car.make,
               model: car.model,
               year: car.year
             });
+            setSavedCar(car); // Use savedCar for temporary car too
             setStep(4); // Skip to problem description
-            return true;
           }
         } catch (error) {
-          console.error('Error parsing localStorage car:', error);
+          console.error('Error retrieving temporary car info:', error);
+          // Simply continue with normal flow if error
         }
-        return false;
-      };
-      
-      // Try to load from localStorage first (faster)
-      if (!checkLastSelectedCar()) {
-        // No car in localStorage, check database
-        const checkUserCars = async () => {
-          try {
-            const { data, error } = await supabase
-              .from('cars')
-              .select('*')
-              .eq('user_id', session.user.id)
-              .order('created_at', { ascending: false });
-            
-            if (error) {
-              console.error('Error fetching cars:', error);
-              setShowCarSelection(true);
-              return;
-            }
-            
-            if (data && data.length > 0) {
-              // User has cars, auto-select most recent or show selection if multiple
-              console.log("Found cars in database:", data);
-              if (data.length === 1) {
-                // Auto-select single car
-                const car = data[0];
-                setSavedCar(car);
-                setCarDetails({
-                  make: car.make,
-                  model: car.model,
-                  year: car.year
-                });
-                setStep(4); // Skip to problem description
-                
-                // Save to localStorage for faster loading next time
-                localStorage.setItem('lastSelectedCar', JSON.stringify(car));
-              } else {
-                // Multiple cars, show selection
-                setShowCarSelection(true);
-              }
-            } else {
-              // No cars found, show car input flow
-              console.log("No cars found for user");
-              setShowCarSelection(true);
-            }
-          } catch (err) {
-            console.error('Error checking user cars:', err);
-            setShowCarSelection(true);
-          }
-        };
-        
-        checkUserCars();
       }
-    } else {
-      // For non-authenticated users, check if they have temporarily saved car info
-      try {
-        const tempCarInfo = localStorage.getItem('tempCarInfo');
-        if (tempCarInfo) {
-          const car = JSON.parse(tempCarInfo);
-          setCarDetails({
-            make: car.make,
-            model: car.model,
-            year: car.year
-          });
-          setSavedCar(car); // Use savedCar for temporary car too
-          setStep(4); // Skip to problem description
-        }
-      } catch (error) {
-        console.error('Error retrieving temporary car info:', error);
-        // Simply continue with normal flow if error
-      }
-    }
+    };
+    
+    checkUserStatus();
   }, [session, supabase]);
 
   useEffect(() => {
@@ -180,8 +239,18 @@ function AppInner() {
         await new Promise((resolve) => setTimeout(resolve, 1000));
         
         if (savedCar) {
+          // Check if this was a car transfer from a non-authenticated session
+          const wasPendingCarSave = localStorage.getItem('justTransferredCar') === 'true';
+          
           // User has a car, show personalized welcome
-          const initialMessage = `Hello, I am AutoMate! I see you're working with your ${savedCar.year} ${savedCar.make} ${savedCar.model}. How can I help you with it today?`;
+          let initialMessage = `Hello, I am AutoMate! I see you're working with your ${savedCar.year} ${savedCar.make} ${savedCar.model}. How can I help you with it today?`;
+          
+          // If this was a transfer, add a special message
+          if (wasPendingCarSave) {
+            initialMessage = `Welcome back! I've saved your ${savedCar.year} ${savedCar.make} ${savedCar.model} to your account. How can I help you with it today?`;
+            localStorage.removeItem('justTransferredCar');
+          }
+          
           setMessages([{ text: initialMessage, sender: 'bot' }]);
         } else if (step === 1) {
           // No car, starting fresh - show welcome and question in one update to prevent duplicates
@@ -208,7 +277,19 @@ function AppInner() {
 
   // Save car to database
   const saveCar = async (car) => {
-    if (!session?.user) return;
+    if (!session?.user) {
+      console.error('Cannot save car: No user session');
+      return null;
+    }
+    
+    console.log('Attempting to save car to user account:', car);
+    
+    // Check if user is at car limit first
+    const atLimit = await checkCarLimit(session.user.id);
+    if (atLimit) {
+      console.error('Cannot save car: User at maximum vehicle limit');
+      return null;
+    }
     
     try {
       const { data, error } = await supabase
@@ -227,13 +308,14 @@ function AppInner() {
         .select();
         
       if (error) {
-        console.error('Error saving car:', error);
+        console.error('Error saving car to database:', error);
         return null;
       }
       
+      console.log('Car successfully saved to database:', data[0]);
       return data[0];
     } catch (error) {
-      console.error('Failed to save car:', error);
+      console.error('Exception saving car to database:', error);
       return null;
     }
   };
@@ -262,30 +344,85 @@ function AppInner() {
 
   // Handle adding a new car
   const handleAddNewCar = () => {
-    // Clear car details
-    setSavedCar(null);
-    setCarDetails({
-      make: '',
-      model: '',
-      year: ''
-    });
-    setStep(1);
-    setShowCarSelection(false);
-    localStorage.removeItem('lastSelectedCar');
-    
-    // Add a "new car" indicator for the conversation flow
-    const isExistingUser = session?.user && messages.length > 0;
-    
-    // Reset messages and start car input flow
-    setMessages([
-      { text: 'Hello, I am AutoMate, I am here to help you with your car problems!', sender: 'bot' },
-      { 
-        text: isExistingUser 
-          ? 'Let\'s add information about your new vehicle. What is the make of your car?' 
-          : 'What is the make of your car?', 
-        sender: 'bot' 
+    // Check if user is at car limit first
+    if (session?.user) {
+      checkCarLimit(session.user.id).then(atLimit => {
+        if (atLimit) {
+          // Show a message that they're at the limit
+          setMessages([
+            { 
+              text: "You've reached the maximum number of vehicles allowed (5). Please delete an existing vehicle before adding a new one.",
+              sender: 'bot' 
+            }
+          ]);
+          return;
+        } else {
+          // Proceed with adding a new car
+          // Clear car details
+          setSavedCar(null);
+          setCarDetails({
+            make: '',
+            model: '',
+            year: ''
+          });
+          setStep(1);
+          setShowCarSelection(false);
+          localStorage.removeItem('lastSelectedCar');
+          
+          // Add a "new car" indicator for the conversation flow
+          const isExistingUser = session?.user && messages.length > 0;
+          
+          // Reset messages and start car input flow
+          setMessages([
+            { text: 'Hello, I am AutoMate, I am here to help you with your car problems!', sender: 'bot' },
+            { 
+              text: isExistingUser 
+                ? 'Let\'s add information about your new vehicle. What is the make of your car?' 
+                : 'What is the make of your car?', 
+              sender: 'bot' 
+            }
+          ]);
+        }
+      });
+    } else {
+      // Non-logged in users have no limit
+      // Clear car details
+      setSavedCar(null);
+      setCarDetails({
+        make: '',
+        model: '',
+        year: ''
+      });
+      setStep(1);
+      setShowCarSelection(false);
+      localStorage.removeItem('lastSelectedCar');
+      
+      // Reset messages and start car input flow
+      setMessages([
+        { text: 'Hello, I am AutoMate, I am here to help you with your car problems!', sender: 'bot' },
+        { text: 'What is the make of your car?', sender: 'bot' }
+      ]);
+    }
+  };
+
+  // Check if user is at car limit
+  const checkCarLimit = async (userId) => {
+    try {
+      const { data, error, count } = await supabase
+        .from('cars')
+        .select('*', { count: 'exact' })
+        .eq('user_id', userId);
+        
+      if (error) {
+        console.error('Error checking car count:', error);
+        return false; // Assume not at limit if error
       }
-    ]);
+      
+      return (data?.length || 0) >= 5; // Maximum 5 cars per user
+    } catch (error) {
+      console.error('Failed to check car limit:', error);
+      return false; // Assume not at limit if error
+    }
   };
 
   // Update car handling for non-authenticated users
@@ -339,16 +476,13 @@ function AppInner() {
         localStorage.setItem('tempCarInfo', JSON.stringify(tempCar));
         setSavedCar(tempCar);
         
-        // Show login prompt with timeout - only once per session
-        if (!localStorage.getItem('loginPromptShown')) {
-          setShowLoginPrompt(true);
-          localStorage.setItem('loginPromptShown', 'true');
-          
-          // Auto-hide the prompt after 10 seconds
-          setTimeout(() => {
-            setShowLoginPrompt(false);
-          }, 10000);
-        }
+        // Always show login prompt when entering car info
+        setShowLoginPrompt(true);
+        
+        // Auto-hide the prompt after 15 seconds
+        setTimeout(() => {
+          setShowLoginPrompt(false);
+        }, 15000);
       }
       
       botMsg = { text: 'Describe the problem with your car...', sender: 'bot' };
@@ -365,9 +499,21 @@ function AppInner() {
     setIsBotTyping(false);
   };
 
-  // Replace restartChat button handler to show confirmation
+  // Show sign-in prompt or confirm dialog for changing car
   const handleRestartClick = () => {
-    setShowRestartConfirm(true);
+    // Close the settings menu
+    setShowSettingsMenu(false);
+    
+    if (session?.user) {
+      // For logged in users, show confirmation dialog
+      setShowRestartConfirm(true);
+    } else {
+      // For non-logged in users, show login prompt first
+      setShowLoginPrompt(true);
+      
+      // Set a flag to indicate this is for changing car
+      localStorage.setItem('changingCar', 'true');
+    }
   };
 
   // Modify restart for both user types
@@ -380,28 +526,24 @@ function AppInner() {
       // Clear saved messages
       localStorage.removeItem('chatMessages');
     } else {
-      // For non-authenticated users, reset to the beginning
+      // For non-authenticated users, restart the car input flow
       localStorage.removeItem('tempCarInfo');
-      localStorage.removeItem('chatMessages');
+      localStorage.removeItem('loginPromptShown'); // Reset this so they see login prompt again
       setSavedCar(null);
       
-      async function showInitialMessages() {
-        setMessages([]);
-        setIsBotTyping(true);
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        // Set both messages at once to prevent duplicates
-        setMessages([
-          { text: 'Hello, I am AutoMate, I am here to help you with your car problems!', sender: 'bot' },
-          { text: 'What is the make of your car?', sender: 'bot' }
-        ]);
-        setIsBotTyping(false);
-      }
-      showInitialMessages();
+      // Show the initial car info input flow
+      setMessages([
+        { text: 'Hello, I am AutoMate, I am here to help you with your car problems!', sender: 'bot' },
+        { text: 'What is the make of your car?', sender: 'bot' }
+      ]);
+      
       setInput('');
       setStep(1);
       setCarDetails({ make: '', model: '', year: '' });
+      setIsBotTyping(false);
     }
     setShowRestartConfirm(false);
+    setShowSettingsMenu(false);
   };
 
   const sendMessage = async () => {
@@ -483,19 +625,112 @@ function AppInner() {
     scrollToBottom();
   }, [messages]);
 
+  // Handle click outside for settings menu
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (settingsMenuRef.current && !settingsMenuRef.current.contains(event.target)) {
+        setShowSettingsMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   // Add login prompt handling
   const handleLoginPromptClose = () => {
     setShowLoginPrompt(false);
+    
+    // Check if this was from changing car
+    if (localStorage.getItem('changingCar') === 'true') {
+      // Clear the flag
+      localStorage.removeItem('changingCar');
+      
+      // User chose to continue without account, so restart the chat
+      restartChatWithoutConfirm();
+    }
   };
 
   const handleLoginRedirect = () => {
     setShowLoginPrompt(false);
+    
+    // Clear the changingCar flag if it exists
+    localStorage.removeItem('changingCar');
+    
     // Redirect to home page to login
-    window.location.href = '/';
+    // Instead, use the same Google sign-in as the Login component
+    googleSignIn();
   };
+
+  // Add the Google sign-in function
+  async function googleSignIn() {
+    try {
+      // Store the car info before auth to ensure we can access it later
+      const tempCarInfo = localStorage.getItem('tempCarInfo');
+      
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin + '/chat',
+        },
+      });
+      
+      if (error) {
+        console.error("Error signing in:", error);
+      } else if (tempCarInfo) {
+        // We need to store this information to transfer the car after login
+        // We can't save it right away because the auth is redirecting
+        // The car will be saved when the user comes back after auth
+        localStorage.setItem('pendingCarSave', tempCarInfo);
+      }
+    } catch (err) {
+      console.error("Error during sign in:", err);
+    }
+  }
 
   const handleUserMenuToggle = () => {
     setShowUserMenu(!showUserMenu);
+  };
+  
+  const handleSettingsToggle = (e) => {
+    e.stopPropagation();
+    setShowSettingsMenu(!showSettingsMenu);
+    // Close other menus
+    setShowUserMenu(false);
+  };
+  
+  // Function to reset chat but keep the same car
+  const resetChat = () => {
+    setMessages([]);
+    setInput('');
+    localStorage.removeItem('chatMessages');
+    setIsBotTyping(true);
+    
+    // Using setTimeout to simulate typing delay
+    setTimeout(() => {
+      if (savedCar) {
+        // User has a car, show personalized welcome
+        let initialMessage = `Hello, I am AutoMate! I'm ready to help you with your ${savedCar.year} ${savedCar.make} ${savedCar.model}. How can I help you with it today?`;
+        
+        // Add warning for non-logged-in users
+        if (!session?.user) {
+          initialMessage = `Hello, I am AutoMate! I'm ready to help you with your ${savedCar.year} ${savedCar.make} ${savedCar.model}. Remember, without an account your car data will be lost if you restart. How can I help you today?`;
+        }
+        
+        setMessages([{ text: initialMessage, sender: 'bot' }]);
+      } else {
+        // No car info - should not normally happen when resetting
+        setMessages([
+          { text: 'Hello, I am AutoMate, I am here to help you with your car problems!', sender: 'bot' },
+          { text: 'What is the make of your car?', sender: 'bot' }
+        ]);
+        setStep(1);
+      }
+      setIsBotTyping(false);
+      setShowSettingsMenu(false);
+    }, 1500);
   };
   
   const handleSignOut = async () => {
@@ -514,6 +749,34 @@ function AppInner() {
       }
     } catch (error) {
       console.error('Error signing out:', error);
+    }
+  };
+
+  // A version of restartChat that doesn't require confirmation
+  const restartChatWithoutConfirm = () => {
+    if (session?.user) {
+      // For logged in users, show car selection UI
+      setShowCarSelection(true);
+      // Clear any existing messages while browsing cars
+      setMessages([]);
+      // Clear saved messages
+      localStorage.removeItem('chatMessages');
+    } else {
+      // For non-authenticated users, restart the car input flow
+      localStorage.removeItem('tempCarInfo');
+      localStorage.removeItem('loginPromptShown');
+      setSavedCar(null);
+      
+      // Show the initial car info input flow
+      setMessages([
+        { text: 'Hello, I am AutoMate, I am here to help you with your car problems!', sender: 'bot' },
+        { text: 'What is the make of your car?', sender: 'bot' }
+      ]);
+      
+      setInput('');
+      setStep(1);
+      setCarDetails({ make: '', model: '', year: '' });
+      setIsBotTyping(false);
     }
   };
 
@@ -652,20 +915,57 @@ function AppInner() {
                 >
                   Send
                 </button>
-                <button
-                  type="button"
-                  className="restart-btn"
-                  onClick={handleRestartClick}
-                >
-                  {session?.user ? 'Change Car' : 'Restart'}
-                </button>
+                <div className="settings-container" ref={settingsMenuRef}>
+                  <button
+                    type="button"
+                    className="settings-btn"
+                    onClick={handleSettingsToggle}
+                    title="Settings"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="3"></circle>
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                  </button>
+                  {showSettingsMenu && (
+                    <div className="settings-menu">
+                      {session?.user ? (
+                        <>
+                          <button onClick={handleRestartClick} className="settings-menu-item">
+                            <span className="settings-icon">🚗</span>
+                            <span>Change Car</span>
+                          </button>
+                          <button onClick={resetChat} className="settings-menu-item">
+                            <span className="settings-icon">🔄</span>
+                            <span>Reset Chat</span>
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={handleRestartClick} className="settings-menu-item">
+                            <span className="settings-icon">🚗</span>
+                            <span>Change Car</span>
+                          </button>
+                          <button onClick={resetChat} className="settings-menu-item">
+                            <span className="settings-icon">🔄</span>
+                            <span>Reset Chat</span>
+                          </button>
+                          <button onClick={handleLoginRedirect} className="settings-menu-item">
+                            <span className="settings-icon">🔑</span>
+                            <span>Sign in with Google</span>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </>
           )}
           {showRestartConfirm && (
             <div className="restart-confirm-modal">
               <div className="restart-confirm-box">
-                <p>{session?.user ? 'Do you want to select a different car?' : 'Are you sure you want to restart the chat?'}</p>
+                <p>{session?.user ? 'Do you want to select a different car?' : 'Do you want to enter new car information? You\'ll need to start over.'}</p>
                 <div className="restart-confirm-buttons">
                   <button
                     type="button"
@@ -679,7 +979,7 @@ function AppInner() {
                     onClick={restartChat}
                     className="restart-confirm-btn"
                   >
-                    {session?.user ? 'Select Car' : 'Restart'}
+                    Change Car
                   </button>
                 </div>
               </div>
@@ -712,21 +1012,25 @@ function AppInner() {
             <div className="login-prompt-modal">
               <div className="login-prompt-box">
                 <button className="close-btn" onClick={handleLoginPromptClose}>×</button>
-                <p>Sign in to save your car details for future sessions!</p>
+                {localStorage.getItem('changingCar') === 'true' ? (
+                  <p>To save your current car information when changing cars, please sign in with Google. If you continue without signing in, you'll need to re-enter your car details.</p>
+                ) : (
+                  <p>Sign in to save your car details! Without an account, you'll lose your car info when changing cars.</p>
+                )}
                 <div className="login-prompt-buttons">
                   <button
                     type="button"
                     onClick={handleLoginRedirect}
                     className="login-now-btn"
                   >
-                    Sign in now
+                    Sign in with<br />Google
                   </button>
                   <button
                     type="button"
                     onClick={handleLoginPromptClose}
                     className="continue-btn"
                   >
-                    Continue without account
+                    {localStorage.getItem('changingCar') === 'true' ? 'Continue & Reset' : 'Continue without account'}
                   </button>
                 </div>
               </div>
