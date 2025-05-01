@@ -22,8 +22,9 @@ const Login = () => {
     <button 
       className="google-sign-in-prompt"
       onClick={googleSignIn}
+      title="Sign in with Google to save your data"
     >
-      Sign in with Google
+      Sign in with<br />Google
     </button>
   );
 };

@@ -44,19 +44,6 @@ const CarSelection = ({ userId, onCarSelect, onAddNewCar }) => {
     fetchUserCars();
   }, [userId, supabase]);
 
-  // Skip car selection if there's only one car
-  useEffect(() => {
-    if (!loading && !error && cars.length === 1) {
-      // Wait a brief moment to show the car, then auto-select it
-      const timer = setTimeout(() => {
-        console.log("Auto-selecting the only car:", cars[0]);
-        onCarSelect(cars[0]);
-      }, 1000);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [cars, loading, error, onCarSelect]);
-
   if (loading) {
     return (
       <div className="car-selection-container loading-container">
@@ -93,17 +80,6 @@ const CarSelection = ({ userId, onCarSelect, onAddNewCar }) => {
             Add Your First Vehicle
           </button>
         </div>
-      ) : cars.length === 1 ? (
-        <div className="single-car-message">
-          <p>Auto-selecting your vehicle:</p>
-          <div className="car-item highlight">
-            <div className="car-icon">🚗</div>
-            <div className="car-details">
-              <h3>{cars[0].year} {cars[0].make} {cars[0].model}</h3>
-              {cars[0].nickname && <p className="car-nickname">{cars[0].nickname}</p>}
-            </div>
-          </div>
-        </div>
       ) : (
         <>
           <div className="car-list">
@@ -122,9 +98,11 @@ const CarSelection = ({ userId, onCarSelect, onAddNewCar }) => {
             ))}
           </div>
           
+          <div className="car-selection-actions">
           <button className="add-car-btn" onClick={onAddNewCar}>
-            Add Another Vehicle
+              Add New Vehicle
           </button>
+          </div>
         </>
       )}
     </div>

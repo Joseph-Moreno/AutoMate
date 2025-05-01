@@ -242,6 +242,7 @@ function AppInner() {
 
   // Handle adding a new car
   const handleAddNewCar = () => {
+    // Clear car details
     setSavedCar(null);
     setCarDetails({
       make: '',
@@ -252,10 +253,18 @@ function AppInner() {
     setShowCarSelection(false);
     localStorage.removeItem('lastSelectedCar');
     
+    // Add a "new car" indicator for the conversation flow
+    const isExistingUser = session?.user && messages.length > 0;
+    
     // Reset messages and start car input flow
     setMessages([
       { text: 'Hello, I am AutoMate, I am here to help you with your car problems!', sender: 'bot' },
-      { text: 'What is the make of your car?', sender: 'bot' }
+      { 
+        text: isExistingUser 
+          ? 'Let\'s add information about your new vehicle. What is the make of your car?' 
+          : 'What is the make of your car?', 
+        sender: 'bot' 
+      }
     ]);
   };
 
@@ -336,11 +345,18 @@ function AppInner() {
     setIsBotTyping(false);
   };
 
+  // Replace restartChat button handler to show confirmation
+  const handleRestartClick = () => {
+    setShowRestartConfirm(true);
+  };
+
   // Modify restart for both user types
   const restartChat = () => {
     if (session?.user) {
-      // For logged in users, show car selection
+      // For logged in users, show car selection UI
       setShowCarSelection(true);
+      // Clear any existing messages while browsing cars
+      setMessages([]);
     } else {
       // For non-authenticated users, reset to the beginning
       localStorage.removeItem('tempCarInfo');
@@ -419,11 +435,6 @@ function AppInner() {
     }
   };
 
-  // Replace restartChat button handler to show confirmation
-  const handleRestartClick = () => {
-    setShowRestartConfirm(true);
-  };
-
   // Home confirmation logic
   const handleHomeClick = (e) => {
     e.preventDefault();
@@ -472,6 +483,8 @@ function AppInner() {
       } else {
         // Clear any local car data
         localStorage.removeItem('lastSelectedCar');
+        localStorage.removeItem('tempCarInfo');
+        setShowUserMenu(false);
         // Redirect to home
         window.location.href = '/';
       }
@@ -482,14 +495,25 @@ function AppInner() {
 
   return (
     <div className="chat-app-layout">
+      {!menuOpen && (
+        <div
+          className="menu-toggle-btn"
+          onClick={() => setMenuOpen(!menuOpen)}
+          title={menuOpen ? 'Hide menu' : 'Show menu'}
+        >
+          <div className="menu-bar" />
+          <div className="menu-bar" />
+          <div className="menu-bar" />
+        </div>
+      )}
       <SideMenu isOpen={menuOpen} onToggle={() => setMenuOpen((open) => !open)} onHomeClick={handleHomeClick} />
       <div className={`App chat-centered${menuOpen ? '' : ' menu-hidden'}`}> 
         <header className="app-header">
-          <div className="app-title-bubble">
+          <div className="app-title-bubble" onClick={handleHomeClick} title="Go to Home">
             AutoMate
             <img src={require('./automateiconnew.png')} alt="AutoMate Icon" className="automate-icon app-title-large-icon" />
           </div>
-          <div className="header-right">
+          <div className="header-right" style={{ right: '25px' }}>
             {!session?.user ? (
               <Login />
             ) : (
@@ -704,18 +728,11 @@ function App() {
 function SideMenu({ isOpen, onToggle, onHomeClick }) {
   return (
     <>
-      <div
-        className="menu-toggle-btn"
-        onClick={onToggle}
-        title={isOpen ? 'Hide menu' : 'Show menu'}
-        style={isOpen ? { left: 245, top: 32 } : { left: 10, top: 32 }}
-      >
-        <div className="menu-bar" />
-        <div className="menu-bar" />
-        <div className="menu-bar" />
-      </div>
       {isOpen && (
         <nav className="side-menu">
+          <div className="menu-close-btn" onClick={onToggle} title="Close menu">
+            <span className="close-x">×</span>
+          </div>
           <div className="menu-title">Menu</div>
           <ul>
             <li><a href="/" onClick={onHomeClick}>Home</a></li>

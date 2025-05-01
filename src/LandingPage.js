@@ -6,7 +6,8 @@ import { useSupabaseClient, useSession } from '@supabase/auth-helpers-react';
 function LandingPage() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showLoginOptions, setShowLoginOptions] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showHomeConfirm, setShowHomeConfirm] = useState(false);
   const supabase = useSupabaseClient();
   const session = useSession();
 
@@ -78,13 +79,32 @@ function LandingPage() {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
+      // Clear any local car data
+      localStorage.removeItem('lastSelectedCar');
+      localStorage.removeItem('tempCarInfo');
+      setShowUserMenu(false);
     } catch (error) {
       console.error('Error signing out:', error);
     }
   };
 
-  const toggleLoginOptions = () => {
-    setShowLoginOptions(!showLoginOptions);
+  const toggleUserMenu = () => {
+    setShowUserMenu(!showUserMenu);
+  };
+
+  // Home confirmation logic
+  const handleHomeClick = (e) => {
+    e.preventDefault();
+    setShowHomeConfirm(true);
+  };
+  
+  const handleHomeConfirm = () => {
+    setShowHomeConfirm(false);
+    window.location.href = '/';
+  };
+  
+  const handleHomeCancel = () => {
+    setShowHomeConfirm(false);
   };
 
   if (loading) {
@@ -93,54 +113,73 @@ function LandingPage() {
 
   return (
     <div className="landing-page">
+      <div className="header-container">
+        <div className="header-right">
+          {!user ? (
+            <Login />
+          ) : (
+            <div className="user-profile-container">
+              <div className="user-profile-mini" onClick={toggleUserMenu}>
+                {user.user_metadata?.avatar_url ? (
+                  <img 
+                    src={user.user_metadata.avatar_url} 
+                    alt={user.user_metadata.full_name || user.email} 
+                    className="user-avatar-mini" 
+                  />
+                ) : (
+                  <div className="user-initial">
+                    {(user.user_metadata?.full_name || user.email || '').charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <span className="user-name-mini">{user.user_metadata?.full_name || user.email}</span>
+              </div>
+              {showUserMenu && (
+                <div className="user-dropdown">
+                  <div className="user-info">
+                    <p className="user-name">{user.user_metadata?.full_name || user.email}</p>
+                    <p className="user-email">{user.email}</p>
+                  </div>
+                  <div className="dropdown-divider"></div>
+                  <button className="sign-out-button" onClick={handleSignOut}>
+                    Sign Out
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+      
       <div className="landing-content">
         <img src={require('./automateiconnew.png')} alt="AutoMate Icon" className="automate-landing-icon" />
         <h1>Welcome to AutoMate</h1>
         <p>Your personal automotive diagnostic assistant.</p>
-        <button onClick={() => window.location.href = '/chat'}>Get Started</button>
+        <button onClick={() => window.location.href = '/chat'} className="get-started-btn">Get Started</button>
       </div>
-      
-      <div className="account-section">
-        {user ? (
-          <div className="user-profile" onClick={toggleLoginOptions}>
-            {user.user_metadata?.avatar_url ? (
-              <img 
-                src={user.user_metadata.avatar_url} 
-                alt={user.user_metadata.full_name || user.email} 
-                className="user-avatar" 
-              />
-            ) : (
-              <div className="account-icon">
-                <img src={require('./automateiconnew.png')} alt="Account" />
-              </div>
-            )}
-            
-            {showLoginOptions && (
-              <div className="user-dropdown">
-                <div className="user-info">
-                  <p className="user-name">{user.user_metadata?.full_name || user.email}</p>
-                  <p className="user-email">{user.email}</p>
-                </div>
-                <div className="dropdown-divider"></div>
-                <button className="sign-out-button" onClick={handleSignOut}>
-                  Sign Out
-                </button>
-              </div>
-            )}
+
+      {showHomeConfirm && (
+        <div className="restart-confirm-modal">
+          <div className="restart-confirm-box">
+            <p>Are you sure you want to go back to the home page?</p>
+            <div className="restart-confirm-buttons">
+              <button
+                type="button"
+                onClick={handleHomeCancel}
+                className="restart-cancel-btn"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleHomeConfirm}
+                className="restart-confirm-btn"
+              >
+                Go to Home
+              </button>
+            </div>
           </div>
-        ) : (
-          <div className="account-icon" onClick={toggleLoginOptions}>
-            <img src={require('./automateiconnew.png')} alt="Account" />
-            
-            {showLoginOptions && (
-              <div className="login-dropdown">
-                <p className="login-prompt">Sign in to save your chat history and preferences</p>
-                <Login />
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
