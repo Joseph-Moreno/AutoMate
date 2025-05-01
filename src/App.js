@@ -12,7 +12,17 @@ console.log(process.env.REACT_APP_GOOGLE_CLIENT_ID);
 
 
 function AppInner() {
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(() => {
+    // Try to load messages from localStorage when component mounts
+    try {
+      const savedMessages = localStorage.getItem('chatMessages');
+      return savedMessages ? JSON.parse(savedMessages) : [];
+    } catch (error) {
+      console.error('Error loading saved messages:', error);
+      return [];
+    }
+  });
+
   const [input, setInput] = useState('');
   const [step, setStep] = useState(1);
   const [carDetails, setCarDetails] = useState({
@@ -34,8 +44,17 @@ function AppInner() {
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   useEffect(() => {
+    // Save messages to localStorage whenever they change
+    if (messages.length > 0) {
+      localStorage.setItem('chatMessages', JSON.stringify(messages));
+    }
+  }, [messages]);
+
+  useEffect(() => {
     const handleVisibilityChange = () => {
-      setIsDocumentVisible(!document.hidden);
+      const isVisible = !document.hidden;
+      setIsDocumentVisible(isVisible);
+      // Don't reset messages or do anything that would clear the chat
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -155,28 +174,29 @@ function AppInner() {
     }
     
     async function showInitialMessages() {
-      // Reset messages first
-      setMessages([]);
-      setIsBotTyping(true);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      
-      if (savedCar) {
-        // User has a car, show personalized welcome
-        const initialMessage = `Hello, I am AutoMate! I see you're working with your ${savedCar.year} ${savedCar.make} ${savedCar.model}. How can I help you with it today?`;
-        setMessages([{ text: initialMessage, sender: 'bot' }]);
-      } else if (step === 1) {
-        // No car, starting fresh - show welcome and question in one update to prevent duplicates
-        setMessages([
-          { text: 'Hello, I am AutoMate, I am here to help you with your car problems!', sender: 'bot' },
-          { text: 'What is the make of your car?', sender: 'bot' }
-        ]);
+      // Only show welcome messages if there are no existing messages
+      if (messages.length === 0) {
+        setIsBotTyping(true);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        
+        if (savedCar) {
+          // User has a car, show personalized welcome
+          const initialMessage = `Hello, I am AutoMate! I see you're working with your ${savedCar.year} ${savedCar.make} ${savedCar.model}. How can I help you with it today?`;
+          setMessages([{ text: initialMessage, sender: 'bot' }]);
+        } else if (step === 1) {
+          // No car, starting fresh - show welcome and question in one update to prevent duplicates
+          setMessages([
+            { text: 'Hello, I am AutoMate, I am here to help you with your car problems!', sender: 'bot' },
+            { text: 'What is the make of your car?', sender: 'bot' }
+          ]);
+        }
+        
+        setIsBotTyping(false);
       }
-      
-      setIsBotTyping(false);
     }
     
     showInitialMessages();
-  }, [savedCar, showCarSelection, isDocumentVisible, step]);
+  }, [savedCar, showCarSelection, isDocumentVisible, step, messages.length]);
 
   // Modify the car selection component rendering to appear only when needed
   useEffect(() => {
@@ -357,9 +377,12 @@ function AppInner() {
       setShowCarSelection(true);
       // Clear any existing messages while browsing cars
       setMessages([]);
+      // Clear saved messages
+      localStorage.removeItem('chatMessages');
     } else {
       // For non-authenticated users, reset to the beginning
       localStorage.removeItem('tempCarInfo');
+      localStorage.removeItem('chatMessages');
       setSavedCar(null);
       
       async function showInitialMessages() {
@@ -484,6 +507,7 @@ function AppInner() {
         // Clear any local car data
         localStorage.removeItem('lastSelectedCar');
         localStorage.removeItem('tempCarInfo');
+        localStorage.removeItem('chatMessages');
         setShowUserMenu(false);
         // Redirect to home
         window.location.href = '/';
