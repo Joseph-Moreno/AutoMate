@@ -4,13 +4,16 @@ const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
-const PORT = 5000;
+const PORT = 5001;
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://192.168.1.17:3000'],
-  methods: ['GET', 'POST'],
-  credentials: true
+  origin: ['http://localhost:3000', 'https://localhost:3000', 'http://192.168.1.17:3000', 'https://192.168.1.17:3000'],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
 app.use(express.json());
 
@@ -28,6 +31,18 @@ app.post('/api/chat', async (req, res) => {
     return res.status(400).json({ error: 'Prompt is required' });
   }
 
+  // Extract car details from the prompt (assuming format "I have a [make] [model] [year]...")
+  let carDetails = { make: "unknown", model: "unknown", year: "unknown" };
+  const carMatch = prompt.match(/I have a ([A-Za-z]+) ([A-Za-z0-9]+) ([0-9]{4})/i);
+  if (carMatch && carMatch.length >= 4) {
+    carDetails = {
+      make: carMatch[1],
+      model: carMatch[2],
+      year: carMatch[3]
+    };
+  }
+  console.log("Extracted car details:", carDetails);
+
   // Verify API key is present
   if (!process.env.OPENAI_API_KEY) {
     console.error('OpenAI API key is missing');
@@ -37,9 +52,26 @@ app.post('/api/chat', async (req, res) => {
   try {
     console.log("Making request to OpenAI...");
     console.log("Request payload:", {
-      model: 'gpt-3.5-turbo',
+      model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: 'You are an automotive diagnostic assistant. Give the top 3 most likely causes and solutions. Be concise and use bullet points.' },
+        { 
+          role: 'system', 
+          content: `You are an automotive diagnostic assistant. For a ${carDetails.year} ${carDetails.make} ${carDetails.model} with the described issue, provide exactly 3 possible causes in this format:
+
+1. REASON: [First possible cause]
+EXPLANATION: [Brief explanation of this cause]
+VIDEO: [How to Fix {specific issue} in a ${carDetails.year} ${carDetails.make} ${carDetails.model}](https://www.youtube.com/results?search_query=${carDetails.year}+${carDetails.make}+${carDetails.model}+{specific issue})
+
+2. REASON: [Second possible cause]
+EXPLANATION: [Brief explanation of this cause]
+VIDEO: [${carDetails.make} ${carDetails.model} {issue} Repair Guide](https://www.youtube.com/results?search_query=${carDetails.year}+${carDetails.make}+${carDetails.model}+{issue}+repair+guide)
+
+3. REASON: [Third possible cause]
+EXPLANATION: [Brief explanation of this cause]
+VIDEO: [DIY ${carDetails.make} ${carDetails.model} {problem} Fix](https://www.youtube.com/results?search_query=${carDetails.year}+${carDetails.make}+${carDetails.model}+{problem}+DIY+fix)
+
+Always use the exact format above with the numbered reasons. Replace {specific issue}, {issue}, and {problem} with specific keywords related to that particular cause. Use proper URL encoding for spaces and special characters in the search URLs.`
+        },
         { role: 'user', content: prompt }
       ]
     });
@@ -47,9 +79,26 @@ app.post('/api/chat', async (req, res) => {
     const response = await axios.post(
       'https://api.openai.com/v1/chat/completions',
       {
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: 'You are an automotive diagnostic assistant. Give the top 3 most likely causes and solutions. Be concise and use bullet points.' },
+          { 
+            role: 'system', 
+            content: `You are an automotive diagnostic assistant. For a ${carDetails.year} ${carDetails.make} ${carDetails.model} with the described issue, provide exactly 3 possible causes in this format:
+
+1. REASON: [First possible cause]
+EXPLANATION: [Brief explanation of this cause]
+VIDEO: [How to Fix {specific issue} in a ${carDetails.year} ${carDetails.make} ${carDetails.model}](https://www.youtube.com/results?search_query=${carDetails.year}+${carDetails.make}+${carDetails.model}+{specific issue})
+
+2. REASON: [Second possible cause]
+EXPLANATION: [Brief explanation of this cause]
+VIDEO: [${carDetails.make} ${carDetails.model} {issue} Repair Guide](https://www.youtube.com/results?search_query=${carDetails.year}+${carDetails.make}+${carDetails.model}+{issue}+repair+guide)
+
+3. REASON: [Third possible cause]
+EXPLANATION: [Brief explanation of this cause]
+VIDEO: [DIY ${carDetails.make} ${carDetails.model} {problem} Fix](https://www.youtube.com/results?search_query=${carDetails.year}+${carDetails.make}+${carDetails.model}+{problem}+DIY+fix)
+
+Always use the exact format above with the numbered reasons. Replace {specific issue}, {issue}, and {problem} with specific keywords related to that particular cause. Use proper URL encoding for spaces and special characters in the search URLs.`
+          },
           { role: 'user', content: prompt }
         ],
         temperature: 0.7
@@ -89,5 +138,5 @@ app.post('/api/chat', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
-  console.log('CORS enabled for:', ['http://localhost:3000', 'http://192.168.1.17:3000']);
+  console.log('CORS enabled for:', ['http://localhost:3000', 'https://localhost:3000', 'http://192.168.1.17:3000', 'https://192.168.1.17:3000']);
 });
