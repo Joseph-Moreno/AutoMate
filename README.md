@@ -1,6 +1,6 @@
 # AutoMate
 
-An AI-powered mechanic chatbot that diagnoses common car problems.
+AI-powered car diagnostic chatbot built with Next.js and the OpenAI API.
 
 By: Elias Hannon, Eric Hurtado & Joseph Moreno
 
